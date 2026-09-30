@@ -24,6 +24,9 @@ static NSArray<NSString *> *RFTHideTokens(void) {
             @"IGSundialViewerUserAttribution",
             @"IGSundialViewerCoauthorUser",
             @"SundialViewerUserAttribution",
+            @"SundialViewerCaption",
+            @"SundialCaption",
+            @"ViewerCaption",
             // العنوان والأيقونات
             @"IGSundialViewerTitleGroup",
             @"IGSundialViewerTitleButton",
@@ -73,6 +76,23 @@ static void RFTDump(UIView *v, int depth, NSMutableString *out) {
     for (UIView *s in v.subviews) RFTDump(s, depth + 1, out);
 }
 
+// إبقاء الزر داخل المنطقة الآمنة (تحت الساعة/البطارية وفوق مؤشر الهوم)
+static void RFTClamp(UIView *b) {
+    UIView *sup = b.superview;
+    if (!sup) return;
+    UIEdgeInsets ins = sup.window ? sup.window.safeAreaInsets : sup.safeAreaInsets;
+    CGFloat hw = b.bounds.size.width / 2;
+    CGFloat hh = b.bounds.size.height / 2;
+    CGFloat minX = hw + 8;
+    CGFloat maxX = sup.bounds.size.width - hw - 8;
+    CGFloat minY = MAX(ins.top, 20.0) + hh + 8;
+    CGFloat maxY = sup.bounds.size.height - ins.bottom - hh - 8;
+    CGPoint c = b.center;
+    c.x = MIN(MAX(c.x, minX), maxX);
+    c.y = MIN(MAX(c.y, minY), maxY);
+    b.center = c;
+}
+
 // ---------------------------------------------------------------
 // معالج الزر (ضغط + سحب + ضغطة مطوّلة)
 // ---------------------------------------------------------------
@@ -84,7 +104,7 @@ static void RFTDump(UIView *v, int depth, NSMutableString *out) {
 @end
 
 static void RFTStyleButton(UIButton *b) {
-    b.backgroundColor = gEnabled ? [UIColor colorWithRed:0.1 green:0.6 blue:1 alpha:0.85]
+    b.backgroundColor = gEnabled ? [UIColor colorWithWhite:0.6 alpha:0.35]
                                  : [UIColor colorWithWhite:0 alpha:0.5];
     [b setTitle:(gEnabled ? @"⤡" : @"⤢") forState:UIControlStateNormal];
 }
@@ -99,24 +119,19 @@ static void RFTStyleButton(UIButton *b) {
     gEnabled = !gEnabled;
     RFTStyleButton(b);
     RFTApply(b.superview);
-    UIWindow *w = b.window;
-    if (w) RFTApply(w);
 }
 - (void)pan:(UIPanGestureRecognizer *)g {
     UIView *b = g.view;
     UIView *sup = b.superview;
     if (!sup) return;
     CGPoint t = [g translationInView:sup];
-    CGPoint c = CGPointMake(b.center.x + t.x, b.center.y + t.y);
-    CGFloat hw = b.bounds.size.width / 2, hh = b.bounds.size.height / 2;
-    c.x = MIN(MAX(c.x, hw), sup.bounds.size.width - hw);
-    c.y = MIN(MAX(c.y, hh), sup.bounds.size.height - hh);
-    b.center = c;
+    b.center = CGPointMake(b.center.x + t.x, b.center.y + t.y);
+    RFTClamp(b);
     [g setTranslation:CGPointZero inView:sup];
     if (g.state == UIGestureRecognizerStateEnded) {
         NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
-        [d setDouble:c.x / sup.bounds.size.width forKey:kPosX];
-        [d setDouble:c.y / sup.bounds.size.height forKey:kPosY];
+        [d setDouble:b.center.x / sup.bounds.size.width forKey:kPosX];
+        [d setDouble:b.center.y / sup.bounds.size.height forKey:kPosY];
     }
 }
 - (void)longPress:(UILongPressGestureRecognizer *)g {
@@ -149,6 +164,7 @@ static void RFTInstallButton(UIView *host) {
     }
     RFTStyleButton(b);
     [host bringSubviewToFront:b];
+    RFTClamp(b);
 }
 
 // ---------------------------------------------------------------
