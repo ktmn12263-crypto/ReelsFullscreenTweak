@@ -24,8 +24,10 @@ jobs:
         run: |
           git clone --recursive https://github.com/theos/theos.git "$THEOS"
 
-      - name: Build package
-        run: make package THEOS="$THEOS"
+            - name: Build package
+        env:
+          THEOS_PACKAGE_SCHEME: rootless
+        run: make package THEOS="$THEOS" THEOS_PACKAGE_SCHEME=rootless
 
       - name: Upload .deb / .dylib artifacts
         uses: actions/upload-artifact@v4
