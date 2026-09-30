@@ -9,24 +9,33 @@ static const NSInteger kRFTButtonTag = 987654;
 static NSString *const kPosX = @"RFT_posX";
 static NSString *const kPosY = @"RFT_posY";
 
-// الكلاسات (أو أجزاء من أسمائها) اللي نخفيها.
-// المطابقة بـ "يحتوي على" عشان تتحمل اختلاف الأسماء بين التحديثات.
+// أجزاء أسماء الكلاسات اللي نخفيها (مطابقة "يحتوي على")
 static NSArray<NSString *> *RFTHideTokens(void) {
     static NSArray *tokens;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         tokens = @[
+            // أزرار التفاعل
             @"IGSundialViewerVerticalUFI",
             @"IGSundialUFIButtonWithCount",
-            @"IGSundialViewerUserAttributionView",
-            @"IGSundialViewerNavigationBar",
-            @"IGSundialViewerTitleGroupView",
-            @"IGSundialViewerProgressIndicator",
             @"SundialViewerVerticalUFI",
             @"SundialUFIButton",
+            // الكابشن + اسم الحساب
+            @"IGSundialViewerUserAttribution",
+            @"IGSundialViewerCoauthorUser",
             @"SundialViewerUserAttribution",
+            // العنوان والأيقونات
+            @"IGSundialViewerTitleGroup",
+            @"IGSundialViewerTitleButton",
+            @"SundialViewerTitleGroup",
+            // الموسيقى / الصوت
+            @"IGSundialViewerLabelWithIcon",
+            @"IGSundialViewerAudioAttribution",
+            @"IGSundialViewerAttributionWithIcon",
+            // الشريط العلوي وشريط التقدم
+            @"IGSundialViewerNavigationBar",
             @"SundialViewerNavigationBar",
-            @"SundialViewerTitleGroup"
+            @"IGSundialViewerProgressIndicator"
         ];
     });
     return tokens;
@@ -51,20 +60,27 @@ static void RFTApply(UIView *root) {
         if (RFTShouldHide(sub)) {
             sub.hidden = gEnabled;
             sub.alpha = gEnabled ? 0.0 : 1.0;
-            // لا ننزل داخله، الأب مخفي بكل أبنائه
             continue;
         }
         RFTApply(sub);
     }
 }
 
+// طباعة شجرة الواجهة (للفحص: ضغطة مطوّلة على الزر تنسخها للحافظة)
+static void RFTDump(UIView *v, int depth, NSMutableString *out) {
+    [out appendFormat:@"%*s%@ [hidden=%d alpha=%.1f]\n", depth * 2, "",
+        NSStringFromClass([v class]), v.hidden, v.alpha];
+    for (UIView *s in v.subviews) RFTDump(s, depth + 1, out);
+}
+
 // ---------------------------------------------------------------
-// معالج الزر (ضغط + سحب)
+// معالج الزر (ضغط + سحب + ضغطة مطوّلة)
 // ---------------------------------------------------------------
 @interface RFTHandler : NSObject
 + (instancetype)shared;
 - (void)toggle:(UIButton *)b;
 - (void)pan:(UIPanGestureRecognizer *)g;
+- (void)longPress:(UILongPressGestureRecognizer *)g;
 @end
 
 static void RFTStyleButton(UIButton *b) {
@@ -82,9 +98,7 @@ static void RFTStyleButton(UIButton *b) {
 - (void)toggle:(UIButton *)b {
     gEnabled = !gEnabled;
     RFTStyleButton(b);
-    UIView *root = b.superview;
-    RFTApply(root);
-    // نطبق على كل الخلايا الظاهرة أيضًا
+    RFTApply(b.superview);
     UIWindow *w = b.window;
     if (w) RFTApply(w);
 }
@@ -105,6 +119,12 @@ static void RFTStyleButton(UIButton *b) {
         [d setDouble:c.y / sup.bounds.size.height forKey:kPosY];
     }
 }
+- (void)longPress:(UILongPressGestureRecognizer *)g {
+    if (g.state != UIGestureRecognizerStateBegan) return;
+    NSMutableString *out = [NSMutableString string];
+    RFTDump(g.view.superview, 0, out);
+    [UIPasteboard generalPasteboard].string = out;
+}
 @end
 
 static void RFTInstallButton(UIView *host) {
@@ -117,8 +137,10 @@ static void RFTInstallButton(UIView *host) {
         b.layer.cornerRadius = 22;
         b.titleLabel.font = [UIFont systemFontOfSize:22];
         [b addTarget:[RFTHandler shared] action:@selector(toggle:) forControlEvents:UIControlEventTouchUpInside];
-        UIPanGestureRecognizer *p = [[UIPanGestureRecognizer alloc] initWithTarget:[RFTHandler shared] action:@selector(pan:)];
-        [b addGestureRecognizer:p];
+        [b addGestureRecognizer:[[UIPanGestureRecognizer alloc]
+            initWithTarget:[RFTHandler shared] action:@selector(pan:)]];
+        [b addGestureRecognizer:[[UILongPressGestureRecognizer alloc]
+            initWithTarget:[RFTHandler shared] action:@selector(longPress:)]];
         NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
         CGFloat ux = [d objectForKey:kPosX] ? [d doubleForKey:kPosX] : 0.9;
         CGFloat uy = [d objectForKey:kPosY] ? [d doubleForKey:kPosY] : 0.15;
@@ -138,6 +160,10 @@ static void RFTInstallButton(UIView *host) {
 @interface IGSundialViewerControlsOverlayController : NSObject
 - (void)setControlsAlphaAttributes:(id)attrs;
 @end
+@interface IGSundialViewerUserAttributionView : UIView @end
+@interface IGSundialViewerUserAttributionMetalLayerView : UIView @end
+@interface IGSundialViewerTitleGroupView : UIView @end
+@interface IGSundialViewerLabelWithIcon : UIView @end
 
 // ---------------------------------------------------------------
 // Hooks
@@ -159,7 +185,6 @@ static void RFTInstallButton(UIView *host) {
 }
 %end
 
-// كل ريل جديد يرث الحالة
 %hook IGSundialViewerVideoCell
 - (void)layoutSubviews {
     %orig;
@@ -167,7 +192,6 @@ static void RFTInstallButton(UIView *host) {
 }
 %end
 
-// الطبقة اللي فوق الفيديو: نعيد الإخفاء كلما إنستغرام حاول يظهرها
 %hook IGSundialViewerControlsOverlayView
 - (void)layoutSubviews {
     %orig;
@@ -175,7 +199,6 @@ static void RFTInstallButton(UIView *host) {
 }
 %end
 
-// المتحكم الرئيسي: بعد ما ينهي تغيير الـ alpha نعيد تطبيق حالتنا
 %hook IGSundialViewerControlsOverlayController
 - (void)setControlsAlphaAttributes:(id)attrs {
     %orig;
@@ -184,4 +207,29 @@ static void RFTInstallButton(UIView *host) {
         if ([v isKindOfClass:[UIView class]]) RFTApply(v);
     }
 }
+%end
+
+// فرض الإخفاء على الكلاسات اللي إنستغرام يعيد إظهارها
+%hook IGSundialViewerUserAttributionView
+- (void)layoutSubviews { %orig; if (gEnabled) { self.hidden = YES; self.alpha = 0; } }
+- (void)setHidden:(BOOL)h { %orig(gEnabled ? YES : h); }
+- (void)setAlpha:(CGFloat)a { %orig(gEnabled ? 0 : a); }
+%end
+
+%hook IGSundialViewerUserAttributionMetalLayerView
+- (void)layoutSubviews { %orig; if (gEnabled) { self.hidden = YES; self.alpha = 0; } }
+- (void)setHidden:(BOOL)h { %orig(gEnabled ? YES : h); }
+- (void)setAlpha:(CGFloat)a { %orig(gEnabled ? 0 : a); }
+%end
+
+%hook IGSundialViewerTitleGroupView
+- (void)layoutSubviews { %orig; if (gEnabled) { self.hidden = YES; self.alpha = 0; } }
+- (void)setHidden:(BOOL)h { %orig(gEnabled ? YES : h); }
+- (void)setAlpha:(CGFloat)a { %orig(gEnabled ? 0 : a); }
+%end
+
+%hook IGSundialViewerLabelWithIcon
+- (void)layoutSubviews { %orig; if (gEnabled) { self.hidden = YES; self.alpha = 0; } }
+- (void)setHidden:(BOOL)h { %orig(gEnabled ? YES : h); }
+- (void)setAlpha:(CGFloat)a { %orig(gEnabled ? 0 : a); }
 %end
