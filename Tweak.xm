@@ -211,25 +211,97 @@ static void RFTInstallButton(UIView *host) {
 
 // فرض الإخفاء على الكلاسات اللي إنستغرام يعيد إظهارها
 %hook IGSundialViewerUserAttributionView
-- (void)layoutSubviews { %orig; if (gEnabled) { self.hidden = YES; self.alpha = 0; } }
-- (void)setHidden:(BOOL)h { BOOL rftV = gEnabled ? YES : h; %orig(rftV); }
-- (void)setAlpha:(CGFloat)a { CGFloat rftV = gEnabled ? 0 : a; %orig(rftV); }
+- (void)layoutSubviews {
+    %orig;
+    if (gEnabled) {
+        self.hidden = YES;
+        self.alpha = 0;
+    }
+}
+- (void)setHidden:(BOOL)h {
+    if (gEnabled) {
+        %orig(YES);
+    } else {
+        %orig(h);
+    }
+}
+- (void)setAlpha:(CGFloat)a {
+    if (gEnabled) {
+        %orig(0.0);
+    } else {
+        %orig(a);
+    }
+}
 %end
 
 %hook IGSundialViewerUserAttributionMetalLayerView
-- (void)layoutSubviews { %orig; if (gEnabled) { self.hidden = YES; self.alpha = 0; } }
-- (void)setHidden:(BOOL)h { BOOL rftV = gEnabled ? YES : h; %orig(rftV); }
-- (void)setAlpha:(CGFloat)a { CGFloat rftV = gEnabled ? 0 : a; %orig(rftV); }
+- (void)layoutSubviews {
+    %orig;
+    if (gEnabled) {
+        self.hidden = YES;
+        self.alpha = 0;
+    }
+}
+- (void)setHidden:(BOOL)h {
+    if (gEnabled) {
+        %orig(YES);
+    } else {
+        %orig(h);
+    }
+}
+- (void)setAlpha:(CGFloat)a {
+    if (gEnabled) {
+        %orig(0.0);
+    } else {
+        %orig(a);
+    }
+}
 %end
 
 %hook IGSundialViewerTitleGroupView
-- (void)layoutSubviews { %orig; if (gEnabled) { self.hidden = YES; self.alpha = 0; } }
-- (void)setHidden:(BOOL)h { BOOL rftV = gEnabled ? YES : h; %orig(rftV); }
-- (void)setAlpha:(CGFloat)a { CGFloat rftV = gEnabled ? 0 : a; %orig(rftV); }
+- (void)layoutSubviews {
+    %orig;
+    if (gEnabled) {
+        self.hidden = YES;
+        self.alpha = 0;
+    }
+}
+- (void)setHidden:(BOOL)h {
+    if (gEnabled) {
+        %orig(YES);
+    } else {
+        %orig(h);
+    }
+}
+- (void)setAlpha:(CGFloat)a {
+    if (gEnabled) {
+        %orig(0.0);
+    } else {
+        %orig(a);
+    }
+}
 %end
 
 %hook IGSundialViewerLabelWithIcon
-- (void)layoutSubviews { %orig; if (gEnabled) { self.hidden = YES; self.alpha = 0; } }
-- (void)setHidden:(BOOL)h { BOOL rftV = gEnabled ? YES : h; %orig(rftV); }
-- (void)setAlpha:(CGFloat)a { CGFloat rftV = gEnabled ? 0 : a; %orig(rftV); }
+- (void)layoutSubviews {
+    %orig;
+    if (gEnabled) {
+        self.hidden = YES;
+        self.alpha = 0;
+    }
+}
+- (void)setHidden:(BOOL)h {
+    if (gEnabled) {
+        %orig(YES);
+    } else {
+        %orig(h);
+    }
+}
+- (void)setAlpha:(CGFloat)a {
+    if (gEnabled) {
+        %orig(0.0);
+    } else {
+        %orig(a);
+    }
+}
 %end
