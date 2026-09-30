@@ -24,7 +24,7 @@ jobs:
         run: |
           git clone --recursive https://github.com/theos/theos.git "$THEOS"
 
-            - name: Build package
+      - name: Build package
         env:
           THEOS_PACKAGE_SCHEME: rootless
         run: make package THEOS="$THEOS" THEOS_PACKAGE_SCHEME=rootless
