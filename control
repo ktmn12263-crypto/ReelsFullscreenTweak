@@ -1,0 +1,9 @@
+Package: com.yourname.reelsfullscreentoggle
+Name: Reels Fullscreen Toggle
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Adds a small fullscreen toggle button on Reels that hides interaction UI, persisting across swipes.
+Maintainer: Your Name
+Author: Your Name
+Section: Tweaks
+Depends: mobilesubstrate
