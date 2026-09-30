@@ -108,13 +108,14 @@ static void RFTApplyStateToView(UIView *root) {
 
     [self.view addSubview:toggleButton];
 
-    // Position it top-right, below the status bar / notch area.
-    // Adjust the offsets to match Instagram's own safe-area usage.
-    CGFloat topInset = self.view.safeAreaInsets.top;
-    toggleButton.frame = CGRectMake(self.view.bounds.size.width - 34 - 16,
-                                     topInset + 12,
-                                     34, 34);
+       // Position it on the right edge, vertically centered on screen.
+    CGFloat buttonSize = 34;
+    CGFloat rightMargin = 16;
+    toggleButton.frame = CGRectMake(self.view.bounds.size.width - buttonSize - rightMargin,
+                                     (self.view.bounds.size.height - buttonSize) / 2.0,
+                                     buttonSize, buttonSize);
     toggleButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin |
+                                     UIViewAutoresizingFlexibleTopMargin |
                                      UIViewAutoresizingFlexibleBottomMargin;
 
     // Re-apply whatever the current global state is (in case the user
