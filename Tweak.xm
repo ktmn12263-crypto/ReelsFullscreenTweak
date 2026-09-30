@@ -77,6 +77,16 @@ static void RFTApplyStateToView(UIView *root) {
 }
 
 // ---------------------------------------------------------------------
+
+
+// Tell the compiler what these private classes actually inherit from,
+// so properties like .view and .contentView resolve correctly.
+@interface IGSundialFeedViewController : UIViewController
+@end
+
+@interface IGSundialViewerVideoCell : UICollectionViewCell
+@end
+
 // Hook the view controller that hosts the Reels feed / single Reel.
 // ---------------------------------------------------------------------
 %hook IGSundialFeedViewController
