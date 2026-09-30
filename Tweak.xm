@@ -104,6 +104,41 @@ static void RFTClamp(UIView *b) {
 // ---------------------------------------------------------------
 // وضع الفحص: نقرة على أي عنصر تعرض سلسلة الكلاسات (وتنسخها للحافظة)
 // ---------------------------------------------------------------
+static CALayer *sRFTSmallest = nil;
+static CGFloat sRFTSmallestArea = 0;
+
+static BOOL RFTInteresting(NSString *n) {
+    for (NSString *k in @[@"Sundial", @"Caption", @"Attribution", @"Label", @"Text"]) {
+        if ([n containsString:k]) return YES;
+    }
+    return NO;
+}
+
+// يمر على كل الطبقات ويطبع اللي تحتوي نقطة النقر (شجرة بالمسافات)
+static void RFTLayerTree(CALayer *l, CGPoint ptInSuper, int depth, NSMutableString *out, int *lines) {
+    if (l.hidden || l.opacity < 0.01f) return;
+    BOOL contains = (depth == 0) ? YES : CGRectContainsPoint(l.frame, ptInSuper);
+    CGPoint local = ptInSuper;
+    if (depth > 0 && l.superlayer) local = [l convertPoint:ptInSuper fromLayer:l.superlayer];
+    if (contains && *lines < 300) {
+        NSString *cn = NSStringFromClass([l class]);
+        id del = l.delegate;
+        NSString *label = cn;
+        if ([del isKindOfClass:[UIView class]]) {
+            label = [NSString stringWithFormat:@"%@ <%@>", cn, NSStringFromClass([del class])];
+        }
+        [out appendFormat:@"%*s%@%@ %@\n", depth, "", RFTInteresting(label) ? @"* " : @"", label,
+            NSStringFromCGSize(l.bounds.size)];
+        (*lines)++;
+        CGFloat area = l.bounds.size.width * l.bounds.size.height;
+        if (area > 100 && (sRFTSmallest == nil || area < sRFTSmallestArea)) {
+            sRFTSmallest = l;
+            sRFTSmallestArea = area;
+        }
+    }
+    for (CALayer *sub in l.sublayers) RFTLayerTree(sub, local, depth + 1, out, lines);
+}
+
 static void RFTToggleInspect(UIWindow *w) {
     if (!w) return;
     UIView *old = [w viewWithTag:kRFTInspectTag];
@@ -203,30 +238,31 @@ static void RFTStyleButton(UIButton *b) {
     CGPoint p = [g locationInView:w];
 
     root.hidden = YES;
-    CALayer *hit = [w.layer hitTest:p];
+    sRFTSmallest = nil;
+    sRFTSmallestArea = 0;
+    NSMutableString *tree = [NSMutableString string];
+    int lines = 0;
+    RFTLayerTree(w.layer, p, 0, tree, &lines);
     root.hidden = NO;
 
     UIView *hl = [root viewWithTag:kRFTHighlightTag];
     UITextView *tv = (UITextView *)[root viewWithTag:kRFTTextTag];
-    NSMutableString *out = [NSMutableString stringWithFormat:@"tap %@\n", NSStringFromCGPoint(p)];
+    NSMutableString *out = [NSMutableString stringWithFormat:@"tap %@  (%d layers at point)\n",
+        NSStringFromCGPoint(p), lines];
 
-    if (!hit) {
-        hl.frame = CGRectZero;
-        [out appendString:@"(nothing found)"];
+    if (sRFTSmallest) {
+        CGRect r = [sRFTSmallest convertRect:sRFTSmallest.bounds toLayer:w.layer];
+        hl.frame = r;
+        id del = sRFTSmallest.delegate;
+        NSString *vn = [del isKindOfClass:[UIView class]] ? NSStringFromClass([del class]) : @"-";
+        [out appendFormat:@"smallest: %@ view=%@ %@\n", NSStringFromClass([sRFTSmallest class]), vn, NSStringFromCGRect(r)];
     } else {
-        int i = 0;
-        for (CALayer *l = hit; l; l = l.superlayer) {
-            id del = l.delegate;
-            NSString *dn = @"";
-            if ([del isKindOfClass:[UIView class]]) {
-                dn = [NSString stringWithFormat:@"  <- view: %@", NSStringFromClass([del class])];
-            }
-            CGRect r = [l convertRect:l.bounds toLayer:w.layer];
-            [out appendFormat:@"%d) %@%@\n    %@\n", i, NSStringFromClass([l class]), dn, NSStringFromCGRect(r)];
-            i++;
-        }
-        hl.frame = [hit convertRect:hit.bounds toLayer:w.layer];
+        hl.frame = CGRectZero;
     }
+    [out appendString:@"----\n"];
+    [out appendString:tree];
+    sRFTSmallest = nil;
+
     tv.text = out;
     [UIPasteboard generalPasteboard].string = out;
 }
