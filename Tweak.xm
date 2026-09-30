@@ -27,6 +27,7 @@ static NSArray<NSString *> *RFTHideTokens(void) {
             @"IGSundialViewerUserAttribution",
             @"IGSundialViewerCoauthorUser",
             @"SundialViewerUserAttribution",
+            @"IGUnifiedVideoCaptionView",
             @"SundialViewerCaption",
             @"SundialCaption",
             @"ViewerCaption",
@@ -47,12 +48,24 @@ static NSArray<NSString *> *RFTHideTokens(void) {
     return tokens;
 }
 
+static BOOL RFTHasAncestor(UIView *v, NSString *token, int maxLevels) {
+    UIView *p = v.superview;
+    for (int i = 0; p && i < maxLevels; i++) {
+        if ([NSStringFromClass([p class]) containsString:token]) return YES;
+        p = p.superview;
+    }
+    return NO;
+}
+
 static BOOL RFTShouldHide(UIView *v) {
     if (v.tag == kRFTButtonTag) return NO;
     NSString *name = NSStringFromClass([v class]);
     for (NSString *t in RFTHideTokens()) {
         if ([name containsString:t]) return YES;
     }
+    // تعتيم الكابشن السفلي فقط (وليس خلفية الفيديو)
+    if ([name isEqualToString:@"IGGradientView"] &&
+        RFTHasAncestor(v, @"ControlsOverlayContainerView", 3)) return YES;
     return NO;
 }
 
@@ -309,6 +322,7 @@ static void RFTInstallButton(UIView *host) {
 @interface IGSundialViewerUserAttributionMetalLayerView : UIView @end
 @interface IGSundialViewerTitleGroupView : UIView @end
 @interface IGSundialViewerLabelWithIcon : UIView @end
+@interface IGUnifiedVideoCaptionView : UIView @end
 
 // ---------------------------------------------------------------
 // Hooks
@@ -428,6 +442,30 @@ static void RFTInstallButton(UIView *host) {
 %end
 
 %hook IGSundialViewerLabelWithIcon
+- (void)layoutSubviews {
+    %orig;
+    if (gEnabled) {
+        self.hidden = YES;
+        self.alpha = 0;
+    }
+}
+- (void)setHidden:(BOOL)h {
+    if (gEnabled) {
+        %orig(YES);
+    } else {
+        %orig(h);
+    }
+}
+- (void)setAlpha:(CGFloat)a {
+    if (gEnabled) {
+        %orig(0.0);
+    } else {
+        %orig(a);
+    }
+}
+%end
+
+%hook IGUnifiedVideoCaptionView
 - (void)layoutSubviews {
     %orig;
     if (gEnabled) {
