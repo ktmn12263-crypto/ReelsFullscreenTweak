@@ -212,24 +212,24 @@ static void RFTInstallButton(UIView *host) {
 // فرض الإخفاء على الكلاسات اللي إنستغرام يعيد إظهارها
 %hook IGSundialViewerUserAttributionView
 - (void)layoutSubviews { %orig; if (gEnabled) { self.hidden = YES; self.alpha = 0; } }
-- (void)setHidden:(BOOL)h { %orig(gEnabled ? YES : h); }
-- (void)setAlpha:(CGFloat)a { %orig(gEnabled ? 0 : a); }
+- (void)setHidden:(BOOL)h { BOOL rftV = gEnabled ? YES : h; %orig(rftV); }
+- (void)setAlpha:(CGFloat)a { CGFloat rftV = gEnabled ? 0 : a; %orig(rftV); }
 %end
 
 %hook IGSundialViewerUserAttributionMetalLayerView
 - (void)layoutSubviews { %orig; if (gEnabled) { self.hidden = YES; self.alpha = 0; } }
-- (void)setHidden:(BOOL)h { %orig(gEnabled ? YES : h); }
-- (void)setAlpha:(CGFloat)a { %orig(gEnabled ? 0 : a); }
+- (void)setHidden:(BOOL)h { BOOL rftV = gEnabled ? YES : h; %orig(rftV); }
+- (void)setAlpha:(CGFloat)a { CGFloat rftV = gEnabled ? 0 : a; %orig(rftV); }
 %end
 
 %hook IGSundialViewerTitleGroupView
 - (void)layoutSubviews { %orig; if (gEnabled) { self.hidden = YES; self.alpha = 0; } }
-- (void)setHidden:(BOOL)h { %orig(gEnabled ? YES : h); }
-- (void)setAlpha:(CGFloat)a { %orig(gEnabled ? 0 : a); }
+- (void)setHidden:(BOOL)h { BOOL rftV = gEnabled ? YES : h; %orig(rftV); }
+- (void)setAlpha:(CGFloat)a { CGFloat rftV = gEnabled ? 0 : a; %orig(rftV); }
 %end
 
 %hook IGSundialViewerLabelWithIcon
 - (void)layoutSubviews { %orig; if (gEnabled) { self.hidden = YES; self.alpha = 0; } }
-- (void)setHidden:(BOOL)h { %orig(gEnabled ? YES : h); }
-- (void)setAlpha:(CGFloat)a { %orig(gEnabled ? 0 : a); }
+- (void)setHidden:(BOOL)h { BOOL rftV = gEnabled ? YES : h; %orig(rftV); }
+- (void)setAlpha:(CGFloat)a { CGFloat rftV = gEnabled ? 0 : a; %orig(rftV); }
 %end
