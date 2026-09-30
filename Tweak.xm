@@ -6,6 +6,9 @@
 // ---------------------------------------------------------------
 static BOOL gEnabled = NO;
 static const NSInteger kRFTButtonTag = 987654;
+static const NSInteger kRFTInspectTag = 987655;
+static const NSInteger kRFTHighlightTag = 987656;
+static const NSInteger kRFTTextTag = 987657;
 static NSString *const kPosX = @"RFT_posX";
 static NSString *const kPosY = @"RFT_posY";
 
@@ -69,13 +72,6 @@ static void RFTApply(UIView *root) {
     }
 }
 
-// طباعة شجرة الواجهة (للفحص: ضغطة مطوّلة على الزر تنسخها للحافظة)
-static void RFTDump(UIView *v, int depth, NSMutableString *out) {
-    [out appendFormat:@"%*s%@ [hidden=%d alpha=%.1f]\n", depth * 2, "",
-        NSStringFromClass([v class]), v.hidden, v.alpha];
-    for (UIView *s in v.subviews) RFTDump(s, depth + 1, out);
-}
-
 // إبقاء الزر داخل المنطقة الآمنة (تحت الساعة/البطارية وفوق مؤشر الهوم)
 static void RFTClamp(UIView *b) {
     UIView *sup = b.superview;
@@ -101,7 +97,69 @@ static void RFTClamp(UIView *b) {
 - (void)toggle:(UIButton *)b;
 - (void)pan:(UIPanGestureRecognizer *)g;
 - (void)longPress:(UILongPressGestureRecognizer *)g;
+- (void)inspectTap:(UITapGestureRecognizer *)g;
+- (void)inspectClose:(UIButton *)b;
 @end
+
+// ---------------------------------------------------------------
+// وضع الفحص: نقرة على أي عنصر تعرض سلسلة الكلاسات (وتنسخها للحافظة)
+// ---------------------------------------------------------------
+static void RFTToggleInspect(UIWindow *w) {
+    if (!w) return;
+    UIView *old = [w viewWithTag:kRFTInspectTag];
+    if (old) {
+        [old removeFromSuperview];
+        return;
+    }
+
+    UIView *root = [[UIView alloc] initWithFrame:w.bounds];
+    root.tag = kRFTInspectTag;
+    root.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    root.backgroundColor = [UIColor clearColor];
+
+    UIView *catcher = [[UIView alloc] initWithFrame:root.bounds];
+    catcher.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    catcher.backgroundColor = [UIColor clearColor];
+    [catcher addGestureRecognizer:[[UITapGestureRecognizer alloc]
+        initWithTarget:[RFTHandler shared] action:@selector(inspectTap:)]];
+    [root addSubview:catcher];
+
+    UIView *hl = [[UIView alloc] initWithFrame:CGRectZero];
+    hl.tag = kRFTHighlightTag;
+    hl.userInteractionEnabled = NO;
+    hl.layer.borderColor = [UIColor redColor].CGColor;
+    hl.layer.borderWidth = 2;
+    hl.backgroundColor = [UIColor colorWithRed:1 green:0 blue:0 alpha:0.12];
+    [root addSubview:hl];
+
+    CGFloat top = MAX(w.safeAreaInsets.top, 20.0) + 8;
+    UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(8, top, w.bounds.size.width - 16, 240)];
+    panel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    panel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.88];
+    panel.layer.cornerRadius = 12;
+    panel.clipsToBounds = YES;
+
+    UITextView *tv = [[UITextView alloc] initWithFrame:CGRectMake(0, 34, panel.bounds.size.width, 206)];
+    tv.tag = kRFTTextTag;
+    tv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    tv.editable = NO;
+    tv.backgroundColor = [UIColor clearColor];
+    tv.textColor = [UIColor greenColor];
+    tv.font = [UIFont fontWithName:@"Menlo" size:11];
+    tv.text = @"Inspect mode: tap any element.\nResult is copied to clipboard automatically.";
+    [panel addSubview:tv];
+
+    UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
+    close.frame = CGRectMake(panel.bounds.size.width - 44, 0, 44, 34);
+    close.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
+    [close setTitle:@"✕" forState:UIControlStateNormal];
+    [close setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    [close addTarget:[RFTHandler shared] action:@selector(inspectClose:) forControlEvents:UIControlEventTouchUpInside];
+    [panel addSubview:close];
+
+    [root addSubview:panel];
+    [w addSubview:root];
+}
 
 static void RFTStyleButton(UIButton *b) {
     b.backgroundColor = gEnabled ? [UIColor colorWithWhite:0.6 alpha:0.35]
@@ -136,9 +194,44 @@ static void RFTStyleButton(UIButton *b) {
 }
 - (void)longPress:(UILongPressGestureRecognizer *)g {
     if (g.state != UIGestureRecognizerStateBegan) return;
-    NSMutableString *out = [NSMutableString string];
-    RFTDump(g.view.superview, 0, out);
+    RFTToggleInspect(g.view.window);
+}
+- (void)inspectTap:(UITapGestureRecognizer *)g {
+    UIView *root = g.view.superview;
+    UIWindow *w = root.window;
+    if (!w) return;
+    CGPoint p = [g locationInView:w];
+
+    root.hidden = YES;
+    CALayer *hit = [w.layer hitTest:p];
+    root.hidden = NO;
+
+    UIView *hl = [root viewWithTag:kRFTHighlightTag];
+    UITextView *tv = (UITextView *)[root viewWithTag:kRFTTextTag];
+    NSMutableString *out = [NSMutableString stringWithFormat:@"tap %@\n", NSStringFromCGPoint(p)];
+
+    if (!hit) {
+        hl.frame = CGRectZero;
+        [out appendString:@"(nothing found)"];
+    } else {
+        int i = 0;
+        for (CALayer *l = hit; l; l = l.superlayer) {
+            id del = l.delegate;
+            NSString *dn = @"";
+            if ([del isKindOfClass:[UIView class]]) {
+                dn = [NSString stringWithFormat:@"  <- view: %@", NSStringFromClass([del class])];
+            }
+            CGRect r = [l convertRect:l.bounds toLayer:w.layer];
+            [out appendFormat:@"%d) %@%@\n    %@\n", i, NSStringFromClass([l class]), dn, NSStringFromCGRect(r)];
+            i++;
+        }
+        hl.frame = [hit convertRect:hit.bounds toLayer:w.layer];
+    }
+    tv.text = out;
     [UIPasteboard generalPasteboard].string = out;
+}
+- (void)inspectClose:(UIButton *)b {
+    [[b.window viewWithTag:kRFTInspectTag] removeFromSuperview];
 }
 @end
 
