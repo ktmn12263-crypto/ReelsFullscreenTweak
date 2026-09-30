@@ -25,6 +25,12 @@
 // ---------------------------------------------------------------------
 @interface ReelsFullscreenState : NSObject
 @property (nonatomic, assign) BOOL isFullscreenEnabled;
+// Remembers where the user last dragged the floating button to, in
+// UNIT coordinates (0.0–1.0 of the screen width/height), so it can be
+// restored at the same relative spot on a new/recycled Reel screen
+// instead of resetting to the default position every time.
+@property (nonatomic, assign) CGPoint savedButtonUnitPosition;
+@property (nonatomic, assign) BOOL hasSavedButtonPosition;
 + (instancetype)shared;
 @end
 
@@ -35,6 +41,7 @@
     dispatch_once(&onceToken, ^{
         instance = [ReelsFullscreenState new];
         instance.isFullscreenEnabled = NO;
+        instance.hasSavedButtonPosition = NO;
     });
     return instance;
 }
@@ -60,6 +67,23 @@ static UIButton *RFTMakeToggleButton(void) {
     return button;
 }
 
+// Keeps a view's center inside its superview's bounds (with a small
+// margin), so the floating button can never be dragged off-screen.
+static CGPoint RFTClampCenterToSuperview(CGPoint center, UIView *view) {
+    UIView *superview = view.superview;
+    if (!superview) return center;
+    CGFloat halfW = view.bounds.size.width / 2.0;
+    CGFloat halfH = view.bounds.size.height / 2.0;
+    CGFloat margin = 4.0;
+    CGFloat minX = halfW + margin;
+    CGFloat maxX = superview.bounds.size.width - halfW - margin;
+    CGFloat minY = halfH + margin + superview.safeAreaInsets.top;
+    CGFloat maxY = superview.bounds.size.height - halfH - margin - superview.safeAreaInsets.bottom;
+    center.x = MAX(minX, MIN(center.x, maxX));
+    center.y = MAX(minY, MIN(center.y, maxY));
+    return center;
+}
+
 // Applies (or removes) the "hide interaction UI" effect on a given
 // Reel cell's content view. Recursively walks the ENTIRE subview tree
 // (not just direct children) looking for the vertical UFI (like/
@@ -70,7 +94,13 @@ static void RFTApplyStateToView(UIView *root) {
     for (UIView *subview in root.subviews) {
         NSString *className = NSStringFromClass([subview class]);
         if ([className containsString:@"IGSundialViewerVerticalUFI"] ||
-            [className containsString:@"IGSundialViewerControlsOverlayView"]) {
+            [className containsString:@"IGSundialViewerControlsOverlayView"] ||
+            // Caption / username / bottom text row. NOTE: these two
+            // names are GUESSES based on Instagram's usual "Sundial"
+            // naming pattern — verify with your own class-dump and
+            // swap in the real names if these don't match/hide anything.
+            [className containsString:@"IGSundialViewerCaptionView"] ||
+            [className containsString:@"IGSundialViewerBottomInfoView"]) {
             subview.hidden = hide;
             subview.alpha = hide ? 0.0 : 1.0;
         }
@@ -81,7 +111,10 @@ static void RFTApplyStateToView(UIView *root) {
 
 // ---------------------------------------------------------------------
 // Tell the compiler what these private classes actually inherit from,
-// so properties like .view and .contentView resolve correctly.
+// so properties like `.view` and `.contentView` resolve correctly.
+// (Logos only knows their names exist unless we declare this.)
+// Adjust the superclass here if your class-dump shows something
+// different (e.g. UITableViewCell instead of UICollectionViewCell).
 // ---------------------------------------------------------------------
 @interface IGSundialFeedViewController : UIViewController
 @end
@@ -109,17 +142,34 @@ static void RFTApplyStateToView(UIView *root) {
                       action:@selector(rft_toggleFullscreen:)
             forControlEvents:UIControlEventTouchUpInside];
 
+    // Dragging: a pan gesture moves the button anywhere on screen.
+    // (Tap-to-toggle above and drag-to-move here don't conflict —
+    // UIButton only fires touchUpInside if the touch didn't turn into
+    // a real drag/pan.)
+    UIPanGestureRecognizer *pan =
+        [[UIPanGestureRecognizer alloc] initWithTarget:self
+                                                 action:@selector(rft_handleDrag:)];
+    [toggleButton addGestureRecognizer:pan];
+
     [self.view addSubview:toggleButton];
 
-    // Position it on the right edge, vertically centered on screen.
     CGFloat buttonSize = 34;
-    CGFloat rightMargin = 16;
-    toggleButton.frame = CGRectMake(self.view.bounds.size.width - buttonSize - rightMargin,
-                                     (self.view.bounds.size.height - buttonSize) / 2.0,
-                                     buttonSize, buttonSize);
-    toggleButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin |
-                                     UIViewAutoresizingFlexibleTopMargin |
-                                     UIViewAutoresizingFlexibleBottomMargin;
+    toggleButton.bounds = CGRectMake(0, 0, buttonSize, buttonSize);
+
+    ReelsFullscreenState *state = [ReelsFullscreenState shared];
+    if (state.hasSavedButtonPosition) {
+        // Restore the last place the user dragged it to.
+        CGPoint saved = state.savedButtonUnitPosition;
+        toggleButton.center = CGPointMake(saved.x * self.view.bounds.size.width,
+                                           saved.y * self.view.bounds.size.height);
+    } else {
+        // Default: right edge, vertically centered on screen.
+        CGFloat rightMargin = 16;
+        toggleButton.center = CGPointMake(self.view.bounds.size.width - buttonSize / 2.0 - rightMargin,
+                                           self.view.bounds.size.height / 2.0);
+    }
+    toggleButton.center = RFTClampCenterToSuperview(toggleButton.center, toggleButton);
+    toggleButton.autoresizingMask = UIViewAutoresizingNone;
 
     // Re-apply whatever the current global state is (in case the user
     // already enabled fullscreen on a previous Reel).
@@ -139,6 +189,28 @@ static void RFTApplyStateToView(UIView *root) {
     ReelsFullscreenState *state = [ReelsFullscreenState shared];
     state.isFullscreenEnabled = !state.isFullscreenEnabled;
     RFTApplyStateToView(self.view);
+}
+
+%new
+- (void)rft_handleDrag:(UIPanGestureRecognizer *)pan {
+    UIView *button = pan.view;
+    CGPoint translation = [pan translationInView:self.view];
+
+    if (pan.state == UIGestureRecognizerStateChanged) {
+        CGPoint newCenter = CGPointMake(button.center.x + translation.x,
+                                         button.center.y + translation.y);
+        button.center = RFTClampCenterToSuperview(newCenter, button);
+        [pan setTranslation:CGPointZero inView:self.view];
+    } else if (pan.state == UIGestureRecognizerStateEnded ||
+               pan.state == UIGestureRecognizerStateCancelled) {
+        // Persist the drop position as a fraction of the screen size,
+        // so it can be restored correctly even if a future Reel screen
+        // has a slightly different size (e.g. rotation).
+        ReelsFullscreenState *state = [ReelsFullscreenState shared];
+        state.savedButtonUnitPosition = CGPointMake(button.center.x / self.view.bounds.size.width,
+                                                      button.center.y / self.view.bounds.size.height);
+        state.hasSavedButtonPosition = YES;
+    }
 }
 
 %end
