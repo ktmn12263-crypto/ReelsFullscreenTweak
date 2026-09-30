@@ -61,9 +61,10 @@ static UIButton *RFTMakeToggleButton(void) {
 }
 
 // Applies (or removes) the "hide interaction UI" effect on a given
-// Reel cell's content view. Walks the subview tree looking for the
-// vertical UFI (like/comment/share) and the controls overlay, and only
-// hides them when the shared toggle is on — never unconditionally.
+// Reel cell's content view. Recursively walks the ENTIRE subview tree
+// (not just direct children) looking for the vertical UFI (like/
+// comment/share) and the controls overlay, and only hides them when
+// the shared toggle is on — never unconditionally.
 static void RFTApplyStateToView(UIView *root) {
     BOOL hide = [ReelsFullscreenState shared].isFullscreenEnabled;
     for (UIView *subview in root.subviews) {
@@ -73,20 +74,22 @@ static void RFTApplyStateToView(UIView *root) {
             subview.hidden = hide;
             subview.alpha = hide ? 0.0 : 1.0;
         }
+        // Recurse into every subview, however deeply nested the UFI is.
+        RFTApplyStateToView(subview);
     }
 }
 
 // ---------------------------------------------------------------------
-
-
 // Tell the compiler what these private classes actually inherit from,
 // so properties like .view and .contentView resolve correctly.
+// ---------------------------------------------------------------------
 @interface IGSundialFeedViewController : UIViewController
 @end
 
 @interface IGSundialViewerVideoCell : UICollectionViewCell
 @end
 
+// ---------------------------------------------------------------------
 // Hook the view controller that hosts the Reels feed / single Reel.
 // ---------------------------------------------------------------------
 %hook IGSundialFeedViewController
@@ -108,7 +111,7 @@ static void RFTApplyStateToView(UIView *root) {
 
     [self.view addSubview:toggleButton];
 
-       // Position it on the right edge, vertically centered on screen.
+    // Position it on the right edge, vertically centered on screen.
     CGFloat buttonSize = 34;
     CGFloat rightMargin = 16;
     toggleButton.frame = CGRectMake(self.view.bounds.size.width - buttonSize - rightMargin,
